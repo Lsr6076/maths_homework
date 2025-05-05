@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Are you ok?</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      background: black; overflow: hidden;
+    }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<canvas id="fractalCanvas"></canvas>
+<script>
+  const canvas = document.getElementById('fractalCanvas');
+  const ctx = canvas.getContext('2d');
+
+  function resize() {
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const DURATION = 15000; // 减少动画总时长，快一点
+  const MAX_DEPTH = 4; // 将最大深度减少到4（去掉最后两个大小的正方形）
+  const START = performance.now();
+  const baseSize = Math.min(canvas.width, canvas.height) * 0.5;
+  const centerX = canvas.width / 2 - baseSize / 2;
+  const centerY = canvas.height / 2 - baseSize / 2;
+
+  // 按层级收集正方形
+  const layers = Array.from({ length: MAX_DEPTH + 1 }, () => []);
+  function collect(x, y, size, depth) {
+    if (depth > MAX_DEPTH) return;  // 限制最大递归深度
+    layers[depth].push({ x, y, size, depth, done: false });
+    const next = size / 2, off = next / 2;
+    collect(x - off, y - off, next, depth + 1);
+    collect(x + size - off, y - off, next, depth + 1);
+    collect(x - off, y + size - off, next, depth + 1);
+    collect(x + size - off, y + size - off, next, depth + 1);
+  }
+  collect(centerX, centerY, baseSize, 0);
+
+  // 扁平化并加上时间区间
+  const queue = [];
+  layers.forEach((layer, d) => {
+    const t0 = d / (MAX_DEPTH + 1) * DURATION;
+    const t1 = (d + 1) / (MAX_DEPTH + 1) * DURATION;
+    layer.forEach(sq => queue.push({ ...sq, t0, t1 }));
+  });
+
+  function drawSquareEdge(sq, p) {
+    // p∈[0,1]：沿四条边总长度绘制
+    const { x, y, size, depth } = sq;
+    const per = size * 4;
+    const L = per * p;
+    ctx.strokeStyle = `hsl(${depth * 360 / (MAX_DEPTH + 1)}, 100%, 70%)`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let rem = L;
+
+    // 边1: from (x,y) → (x+size,y)
+    if (rem > 0) {
+      const draw = Math.min(size, rem);
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + draw, y);
+      rem -= draw;
+    }
+    // 边2: (x+size,y) → (x+size,y+size)
+    if (rem > 0) {
+      const draw = Math.min(size, rem);
+      ctx.moveTo(x + size, y);
+      ctx.lineTo(x + size, y + draw);
+      rem -= draw;
+    }
+    // 边3: → (x,y+size)
+    if (rem > 0) {
+      const draw = Math.min(size, rem);
+      ctx.moveTo(x + size, y + size);
+      ctx.lineTo(x + size - draw, y + size);
+      rem -= draw;
+    }
+    // 边4: → (x,y)
+    if (rem > 0) {
+      const draw = Math.min(size, rem);
+      ctx.moveTo(x, y + size);
+      ctx.lineTo(x, y + size - draw);
+      rem -= draw;
+    }
+    ctx.stroke();
+  }
+
+  function animate(now) {
+    const t = now - START;
+    queue.forEach(sq => {
+      if (sq.done) return;
+      if (t < sq.t0) return;
+      const p = Math.min(1, (t - sq.t0) / (sq.t1 - sq.t0));
+      drawSquareEdge(sq, p);
+      if (p >= 1) sq.done = true;
+    });
+    if (t < DURATION) requestAnimationFrame(animate);
+  }
+
+  requestAnimationFrame(animate);
+</script>
+</body>
+</html>
